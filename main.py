@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Query, Path, HTTPException
 from pydantic import BaseModel, Field, validator
 from typing import Optional
+import asyncio
 
 app = FastAPI()
 
@@ -19,11 +20,13 @@ class Item(BaseModel):
 items_db = {}
 
 @app.get("/")
-def home():
+async def home():
+    await asyncio.sleep(2)
     return {"message": "Welcome to FastAPI demo"}
 
 @app.post("/items")
-def create_item(item: Item):
+async def create_item(item: Item):
+    await asyncio.sleep(2)
     item_id = len(items_db) + 1
     items_db[item_id] = item
 
@@ -33,11 +36,18 @@ def create_item(item: Item):
         "data": item
     }
 
+@app.get("/items")
+async def list_items():
+    await asyncio.sleep(2)
+    return {item_id: item for item_id, item in items_db.items()}
+
 @app.get("/items/{item_id}")
-def get_item(
+async def get_item(
     item_id: int = Path(..., gt=0),
     include_description: bool = Query(False)
 ):
+    await asyncio.sleep(2)
+
     if item_id not in items_db:
         raise HTTPException(status_code=404, detail="Item not found")
 
@@ -55,7 +65,9 @@ def get_item(
     return response
 
 @app.put("/items/{item_id}")
-def update_item(item_id: int, item: Item):
+async def update_item(item_id: int, item: Item):
+    await asyncio.sleep(2)
+
     if item_id not in items_db:
         raise HTTPException(status_code=404, detail="Item not found")
 
@@ -67,7 +79,9 @@ def update_item(item_id: int, item: Item):
     }
 
 @app.delete("/items/{item_id}")
-def delete_item(item_id: int):
+async def delete_item(item_id: int):
+    await asyncio.sleep(2)
+
     if item_id not in items_db:
         raise HTTPException(status_code=404, detail="Item not found")
 
