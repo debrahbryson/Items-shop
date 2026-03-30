@@ -1,92 +1,57 @@
-from fastapi import FastAPI, Query, Path, HTTPException
-from pydantic import BaseModel, Field, validator
-from typing import Optional
+from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy.orm import Session
 import asyncio
+
+import models, schemas, crud
+from database import SessionLocal, engine
+
+models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
-class Item(BaseModel):
-    name: str = Field(..., min_length=3, max_length=50)
-    price: float = Field(..., gt=0)
-    quantity: int = Field(default=1, ge=1)
-    description: Optional[str] = None
-
-    @validator("name")
-    def name_must_not_be_empty(cls, value):
-        if not value.strip():
-            raise ValueError("Name cannot be empty")
-        return value
-
-items_db = {}
+# Dependency to get DB session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 @app.get("/")
 async def home():
     await asyncio.sleep(2)
     return {"message": "Welcome to FastAPI demo"}
 
-@app.post("/items")
-async def create_item(item: Item):
+@app.post("/items", response_model=schemas.ItemResponse)
+async def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db)):
     await asyncio.sleep(2)
-    item_id = len(items_db) + 1
-    items_db[item_id] = item
+    return crud.create_item(db, item)
 
-    return {
-        "message": "Item created successfully",
-        "item_id": item_id,
-        "data": item
-    }
-
-@app.get("/items")
-async def list_items():
+@app.get("/items", response_model=list[schemas.ItemResponse])
+async def list_items(db: Session = Depends(get_db)):
     await asyncio.sleep(2)
-    return {item_id: item for item_id, item in items_db.items()}
+    return crud.get_items(db)
 
-@app.get("/items/{item_id}")
-async def get_item(
-    item_id: int = Path(..., gt=0),
-    include_description: bool = Query(False)
-):
+@app.get("/items/{item_id}", response_model=schemas.ItemResponse)
+async def get_item(item_id: int, db: Session = Depends(get_db)):
     await asyncio.sleep(2)
-
-    if item_id not in items_db:
+    db_item = crud.get_item(db, item_id)
+    if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
+    return db_item
 
-    item = items_db[item_id]
-
-    response = {
-        "name": item.name,
-        "price": item.price,
-        "quantity": item.quantity
-    }
-
-    if include_description:
-        response["description"] = item.description
-
-    return response
-
-@app.put("/items/{item_id}")
-async def update_item(item_id: int, item: Item):
+@app.put("/items/{item_id}", response_model=schemas.ItemResponse)
+async def update_item(item_id: int, item: schemas.ItemCreate, db: Session = Depends(get_db)):
     await asyncio.sleep(2)
-
-    if item_id not in items_db:
+    db_item = crud.update_item(db, item_id, item)
+    if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
-
-    items_db[item_id] = item
-
-    return {
-        "message": "Item updated successfully",
-        "data": item
-    }
+    return db_item
 
 @app.delete("/items/{item_id}")
-async def delete_item(item_id: int):
+async def delete_item(item_id: int, db: Session = Depends(get_db)):
     await asyncio.sleep(2)
-
-    if item_id not in items_db:
+    db_item = crud.delete_item(db, item_id)
+    if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
-
-    del items_db[item_id]
-
-    return {
-        "message": "Item deleted successfully"
-    }
+    return {"message": "Item deleted successfully"}
